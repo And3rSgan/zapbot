@@ -40,8 +40,8 @@ SELECT cron.schedule(
   $$
   SELECT
     net.http_post(
-      url := 'https://kanwjqoefychikldcuac.supabase.co/functions/v1/send-reminders',
-      headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbnhycGR0eGlscWhnYXJtY3Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzNzA5NzEsImV4cCI6MjA2MDk0Njk3MX0.YrTuXalSG-T570WmwlgfCKxah3HRbO9QEC5xs4zO_HI"}'::jsonb,
+      url := 'https://ukgffmdatpjcfqfguoss.supabase.co/functions/v1/send-reminders',
+      headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrZ2ZmbWRhdHBqY2ZxZmd1b3NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NDkwMTIsImV4cCI6MjA4ODIyNTAxMn0.RXFeO3OBecSIutlDKNpswvNVPFAt3ec7EXHWp1glkL4"}'::jsonb,
       body := concat('{"time": "', now(), '"}')::jsonb
     ) AS request_id;
   $$
