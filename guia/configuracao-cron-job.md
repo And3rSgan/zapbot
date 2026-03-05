@@ -1,6 +1,6 @@
-# Configuração do Cron Job — ZapMax
+# Configuração do Cron Job — ZapBot
 
-Este guia explica como configurar o cron job utilizado pelo ZapMax para envio automático de lembretes de agendamento via WhatsApp.
+Este guia explica como configurar o cron job utilizado pelo ZapBot para envio automático de lembretes de agendamento via WhatsApp.
 
 ---
 

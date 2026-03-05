@@ -1,6 +1,6 @@
-# Configuração de Secrets — ZapMax
+# Configuração de Secrets — ZapBot
 
-Este guia explica como configurar os secrets (variáveis de ambiente seguras) necessários para o funcionamento do ZapMax em um projeto Supabase.
+Este guia explica como configurar os secrets (variáveis de ambiente seguras) necessários para o funcionamento do ZapBot em um projeto Supabase.
 
 ---
 

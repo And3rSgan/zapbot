@@ -1,4 +1,4 @@
-# Deploy e Migração — ZapMax
+# Deploy e Migração — ZapBot
 
 Guia passo a passo para fazer deploy das Edge Functions e migrar o banco de dados para outro projeto Supabase.
 

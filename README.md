@@ -1,4 +1,4 @@
-# ZapMax — Funcionalidades do Sistema
+# ZapBot — Funcionalidades do Sistema
 
 ## 📊 Dashboard
 
