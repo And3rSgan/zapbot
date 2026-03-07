@@ -31,8 +31,6 @@ function formatTime(dateStr: string) {
 
 function ChatBubble({ message }: { message: Message }) {
   const isInbound = message.direction === "inbound";
-  const isMediaMessage = message.media_url && message.media_type;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.97 }}
@@ -58,22 +56,7 @@ function ChatBubble({ message }: { message: Message }) {
             )}
           </div>
         )}
-        {isMediaMessage ? (
-          <div className="mb-2">
-            {message.media_type.startsWith("image") && (
-              <img src={message.media_url} alt="Mídia" className="max-w-full h-auto rounded-md" />
-            )}
-            {message.media_type.startsWith("audio") && (
-              <audio controls src={message.media_url} className="w-full" />
-            )}
-            {message.media_type.startsWith("video") && (
-              <video controls src={message.media_url} className="max-w-full h-auto rounded-md" />
-            )}
-            {message.content && <p className="text-sm whitespace-pre-line mt-2">{message.content}</p>}
-          </div>
-        ) : (
-          <p className="text-sm whitespace-pre-line">{message.content}</p>
-        )}
+        <p className="text-sm whitespace-pre-line">{message.content}</p>
         <div className={`flex items-center gap-1 mt-1 ${isInbound ? "justify-start" : "justify-end"}`}>
           <span className="text-[10px] text-muted-foreground">{formatTime(message.sent_at)}</span>
         </div>
@@ -159,11 +142,6 @@ export default function Conversas() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevConvCountRef = useRef(0);
   const messageLimitReached = !!plan && !!usage && plan.max_messages !== null && usage.messages_this_month >= plan.max_messages;
-
-  // New states for media handling
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   // Instance filter from query param
   const instanceFilter = searchParams.get("instance");
@@ -267,9 +245,9 @@ export default function Conversas() {
     if (conv.unread_count > 0) markAsRead(conv.id);
   };
 
-  const handleSend = async (content?: string, mediaUrl?: string, mediaType?: string) => {
+  const handleSend = async (content?: string) => {
     const msgToSend = content || newMessage.trim();
-    if ((!msgToSend && !mediaUrl) || !selectedId || sending || uploadingMedia) return;
+    if (!msgToSend || !selectedId || sending) return;
 
     if (!planLimitsLoading && messageLimitReached && plan?.max_messages !== null) {
       toast.error(`Limite mensal de ${plan.max_messages} mensagens atingido no seu plano`);
@@ -278,66 +256,17 @@ export default function Conversas() {
 
     setSending(true);
     try {
-      const payload: any = { conversation_id: selectedId, content: msgToSend };
-      if (mediaUrl && mediaType) {
-        payload.media_url = mediaUrl;
-        payload.media_type = mediaType;
-      }
-
       const { data, error } = await supabase.functions.invoke("whatsapp-instances", {
-        body: { _action: "send-message", ...payload },
+        body: { _action: "send-message", conversation_id: selectedId, content: msgToSend },
       });
       if (error || !data?.success) {
         toast.error(data?.error || "Erro ao enviar mensagem");
       } else {
         if (!content) setNewMessage("");
-        setSelectedFile(null); // Limpa o arquivo selecionado
-        if (fileInputRef.current) fileInputRef.current.value = ""; // Limpa o input file
         void refetchPlanLimits();
       }
     } catch { toast.error("Erro ao enviar mensagem"); }
     setSending(false);
-  };
-
-  // Nova função para lidar com a seleção e upload de arquivos
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setSelectedFile(file);
-
-    setUploadingMedia(true);
-    try {
-      const fileExtension = file.name.split(".").pop();
-      const fileName = `${selectedId}/${Date.now()}.${fileExtension}`; // Nome do arquivo único
-      const { data, error } = await supabase.storage
-        .from("whatsapp-media") // Altere para o nome do seu bucket de Storage
-        .upload(fileName, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (error) {
-        toast.error("Erro ao fazer upload da mídia: " + error.message);
-        setUploadingMedia(false);
-        return;
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("whatsapp-media")
-        .getPublicUrl(fileName);
-
-      if (publicUrlData.publicUrl) {
-        await handleSend(newMessage.trim(), publicUrlData.publicUrl, file.type);
-        setNewMessage(""); // Limpa o campo de mensagem
-      } else {
-        toast.error("Erro ao obter URL pública da mídia.");
-      }
-    } catch (e) {
-      console.error("Erro no upload da mídia:", e);
-      toast.error("Erro ao fazer upload da mídia.");
-    }
-    setUploadingMedia(false);
   };
 
   const handleAIResponse = useCallback(async () => {
@@ -618,11 +547,7 @@ export default function Conversas() {
                   className="flex flex-1 min-w-0 items-center gap-3 rounded-md p-2 text-left hover:bg-secondary/50 transition-colors"
                 >
                   <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                    {conv.contact.avatar_url ? (
-                      <img src={conv.contact.avatar_url} alt={conv.contact.name.charAt(0).toUpperCase()} className="h-full w-full rounded-full object-cover" />
-                    ) : (
-                      conv.contact.name.charAt(0).toUpperCase()
-                    )}
+                    {conv.contact.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
@@ -733,11 +658,7 @@ export default function Conversas() {
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-              {selectedConv.contact.avatar_url ? (
-                <img src={selectedConv.contact.avatar_url} alt={selectedConv.contact.name.charAt(0).toUpperCase()} className="h-full w-full rounded-full object-cover" />
-              ) : (
-                selectedConv.contact.name.charAt(0).toUpperCase()
-              )}
+              {selectedConv.contact.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">{selectedConv.contact.name}</p>
@@ -953,37 +874,19 @@ export default function Conversas() {
                 >
                   {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 </Button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  onChange={handleFileSelect}
-                  accept="image/*,audio/*,video/*" // Define os tipos de arquivo aceitos
-                  disabled={uploadingMedia || sending || messageLimitReached}
-                />
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingMedia || sending || messageLimitReached}
-                  title="Anexar arquivo"
-                >
-                  {uploadingMedia ? <Loader2 className="h-4 w-4 animate-spin" /> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-paperclip"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>} {/* Ícone de clipe */}
-                </Button>
                 <Input
                   placeholder={messageLimitReached ? t.conversations.monthlyLimitReached : t.conversations.typeMessage}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                   className="flex-1"
-                  disabled={sending || messageLimitReached || uploadingMedia}
+                  disabled={sending || messageLimitReached}
                 />
                 <Button
                   size="icon"
                   className="h-9 w-9 shrink-0"
                   onClick={() => handleSend()}
-                  disabled={(!newMessage.trim() && !selectedFile) || sending || messageLimitReached || uploadingMedia}
+                  disabled={!newMessage.trim() || sending || messageLimitReached}
                 >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
