@@ -27,6 +27,23 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// Utility function to fetch URL and convert to Base64
+async function urlToBase64(url: string, mimeType: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch media from URL: ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    const base64String = btoa(String.fromCharCode(...bytes)); // Simple btoa for Deno
+    return `data:${mimeType};base64,${base64String}`;
+  } catch (error) {
+    console.error("Error converting URL to Base64:", error);
+    throw error;
+  }
+}
+
 async function getTenantPlanContext(adminClient: any, tenantId: string) {
   const { data: sub } = await adminClient
     .from("subscriptions")
@@ -481,32 +498,49 @@ Deno.serve(async (req) => {
       if (evolutionUrl && evolutionKey && instance?.evolution_instance_id) {
         try {
           let evolutionApiEndpoint = '';
-          let evolutionApiPayload: any = { number: phone };
+          let evolutionApiPayload: any = { number: phone }; // Start with just number
+
+          // For all media types and text, caption is part of the payload IF it exists
+          if (cleanContent) {
+            evolutionApiPayload.caption = cleanContent; // Add caption if not empty
+          }
 
           if (media_url && media_type) {
-            // Logic for sending media
+            let base64Media = '';
+            try {
+              base64Media = await urlToBase64(media_url, media_type);
+            } catch (error) {
+              console.error("Failed to convert media URL to Base64:", error);
+              return jsonResponse({ success: false, error: "Failed to prepare media for sending" }, 500);
+            }
+
+            // Add common media fields
+            evolutionApiPayload.mimetype = media_type; // Full MIME type
+            evolutionApiPayload.fileName = `file.${media_type.split('/')[1] || "bin"}`; // Set a default filename for all media types
+
             if (media_type.startsWith("image")) {
-              evolutionApiEndpoint = `/message/sendImage/${instance.evolution_instance_id}`; // Assuming sendImage endpoint
-              evolutionApiPayload.base64 = media_url; // Evolution API often expects base64 or URL directly
-              evolutionApiPayload.caption = cleanContent; // Caption for image
+              evolutionApiEndpoint = `/message/sendMedia/${instance.evolution_instance_id}`;
+              evolutionApiPayload.mediatype = "image";
+              evolutionApiPayload.media = base64Media; // Base64 for image
             } else if (media_type.startsWith("audio")) {
-              evolutionApiEndpoint = `/message/sendAudio/${instance.evolution_instance_id}`; // Assuming sendAudio endpoint
-              evolutionApiPayload.audio = media_url; // URL for audio
-              evolutionApiPayload.ptt = true; // Often for voice notes
+              evolutionApiEndpoint = `/message/sendWhatsAppAudio/${instance.evolution_instance_id}`; // Specific endpoint for audio
+              evolutionApiPayload.audio = base64Media; // Assuming 'audio' field for Base64
+              evolutionApiPayload.ptt = true; // Assuming PTT is needed for sendWhatsAppAudio
+              // Note: For sendWhatsAppAudio, the documentation for sendMedia's 'media' and 'mediatype' are not applicable.
+              // We already ensure 'caption' is added if cleanContent exists.
             } else if (media_type.startsWith("video")) {
-              evolutionApiEndpoint = `/message/sendVideo/${instance.evolution_instance_id}`; // Assuming sendVideo endpoint
-              evolutionApiPayload.video = media_url; // URL for video
-              evolutionApiPayload.caption = cleanContent;
-            } else { // Generic file
-              evolutionApiEndpoint = `/message/sendFile/${instance.evolution_instance_id}`; // Assuming sendFile endpoint
-              evolutionApiPayload.file = media_url; // URL for generic file
-              evolutionApiPayload.fileName = `file.${media_type.split('/')[1] || "bin"}`; // Generic filename
-              evolutionApiPayload.caption = cleanContent;
+              evolutionApiEndpoint = `/message/sendMedia/${instance.evolution_instance_id}`;
+              evolutionApiPayload.mediatype = "video";
+              evolutionApiPayload.media = base64Media; // Base64 for video
+            } else { // Generic file (document)
+              evolutionApiEndpoint = `/message/sendMedia/${instance.evolution_instance_id}`;
+              evolutionApiPayload.mediatype = "document";
+              evolutionApiPayload.media = base64Media; // Base64 for document
             }
           } else {
-            // Logic for sending text only
+            // If no media_url, send as plain text
             evolutionApiEndpoint = `/message/sendText/${instance.evolution_instance_id}`;
-            evolutionApiPayload.text = cleanContent;
+            evolutionApiPayload = { number: phone, text: cleanContent }; // Reset payload for text
           }
 
           const evoRes = await fetch(`${evolutionUrl}${evolutionApiEndpoint}`, {
