@@ -430,14 +430,16 @@ Deno.serve(async (req) => {
 
     // SEND MESSAGE
     if (action === "send-message") {
-      const { conversation_id, content } = body;
-      if (!conversation_id || typeof content !== "string") {
-        return jsonResponse({ success: false, error: "conversation_id and content required" }, 400);
+      const { conversation_id, content, media_url, media_type } = body; // Destructure new media fields
+      if (!conversation_id) {
+        return jsonResponse({ success: false, error: "conversation_id required" }, 400);
       }
 
-      const cleanContent = content.trim();
-      if (!cleanContent) {
-        return jsonResponse({ success: false, error: "Mensagem vazia não é permitida" }, 400);
+      const cleanContent = typeof content === "string" ? content.trim() : "";
+      
+      // Allow empty text content if media is present
+      if (!cleanContent && !media_url) {
+        return jsonResponse({ success: false, error: "Mensagem vazia ou sem mídia não é permitida" }, 400);
       }
 
       const { data: conv } = await adminClient
@@ -469,20 +471,60 @@ Deno.serve(async (req) => {
       const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
       const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
       const instance = conv.instance as any;
+      const contact = conv.contact as any;
+      const phone = contact?.phone;
+
+      if (!phone) {
+        return jsonResponse({ success: false, error: "Contact phone not found for conversation" }, 400);
+      }
 
       if (evolutionUrl && evolutionKey && instance?.evolution_instance_id) {
-        const contact = conv.contact as any;
-        const phone = contact?.phone;
-        if (phone) {
-          try {
-            await fetch(`${evolutionUrl}/message/sendText/${instance.evolution_instance_id}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "apikey": evolutionKey },
-              body: JSON.stringify({ number: phone, text: cleanContent }),
-            });
-          } catch (e) {
-            console.error("Evolution send error:", e);
+        try {
+          let evolutionApiEndpoint = '';
+          let evolutionApiPayload: any = { number: phone };
+
+          if (media_url && media_type) {
+            // Logic for sending media
+            if (media_type.startsWith("image")) {
+              evolutionApiEndpoint = `/message/sendImage/${instance.evolution_instance_id}`; // Assuming sendImage endpoint
+              evolutionApiPayload.base64 = media_url; // Evolution API often expects base64 or URL directly
+              evolutionApiPayload.caption = cleanContent; // Caption for image
+            } else if (media_type.startsWith("audio")) {
+              evolutionApiEndpoint = `/message/sendAudio/${instance.evolution_instance_id}`; // Assuming sendAudio endpoint
+              evolutionApiPayload.audio = media_url; // URL for audio
+              evolutionApiPayload.ptt = true; // Often for voice notes
+            } else if (media_type.startsWith("video")) {
+              evolutionApiEndpoint = `/message/sendVideo/${instance.evolution_instance_id}`; // Assuming sendVideo endpoint
+              evolutionApiPayload.video = media_url; // URL for video
+              evolutionApiPayload.caption = cleanContent;
+            } else { // Generic file
+              evolutionApiEndpoint = `/message/sendFile/${instance.evolution_instance_id}`; // Assuming sendFile endpoint
+              evolutionApiPayload.file = media_url; // URL for generic file
+              evolutionApiPayload.fileName = `file.${media_type.split('/')[1] || "bin"}`; // Generic filename
+              evolutionApiPayload.caption = cleanContent;
+            }
+          } else {
+            // Logic for sending text only
+            evolutionApiEndpoint = `/message/sendText/${instance.evolution_instance_id}`;
+            evolutionApiPayload.text = cleanContent;
           }
+
+          const evoRes = await fetch(`${evolutionUrl}${evolutionApiEndpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "apikey": evolutionKey },
+            body: JSON.stringify(evolutionApiPayload),
+          });
+          const evoText = await evoRes.text(); // Capture response text for better error logging
+
+          if (!evoRes.ok) {
+            console.error("Evolution API send error:", evoRes.status, evoText);
+            // Optionally, rethrow to trigger outer catch for a client-facing error
+            // throw new Error(`Evolution API error: ${evoRes.status} - ${evoText}`);
+          } else {
+            console.log("Evolution API send success:", evoText);
+          }
+        } catch (e) {
+          console.error("Evolution send error during fetch:", e);
         }
       }
 
@@ -494,6 +536,8 @@ Deno.serve(async (req) => {
           direction: "outbound",
           content: cleanContent,
           sent_at: new Date().toISOString(),
+          media_url: media_url || null, // Save media URL
+          media_type: media_type || null, // Save media Type
         })
         .select()
         .single();
