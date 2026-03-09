@@ -1,10 +1,72 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { v4 as uuidv4 } from "https://deno.land/std@0.170.0/uuid/mod.ts";
+import { extname } from "https://deno.land/std@0.170.0/path/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+async function rehostMedia(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  tenantId: string,
+  conversationId: string,
+  whatsappMediaUrl: string,
+  originalMediaType: string,
+): Promise<{ success: boolean; url: string | null; type: string | null }> {
+  try {
+    const response = await fetch(whatsappMediaUrl);
+    if (!response.ok) {
+      console.error("Failed to download media from WhatsApp URL:", whatsappMediaUrl, response.status, response.statusText);
+      return { success: false, url: null, type: null };
+    }
+
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    // Determine file extension
+    let fileExtension = extname(new URL(whatsappMediaUrl).pathname);
+    if (!fileExtension && originalMediaType) {
+        // Fallback: try to derive from mediaType
+        if (originalMediaType.startsWith("image/")) fileExtension = `.${originalMediaType.split("/")[1]}`;
+        else if (originalMediaType.startsWith("audio/")) fileExtension = `.${originalMediaType.split("/")[1]}`;
+        else if (originalMediaType.startsWith("video/")) fileExtension = `.${originalMediaType.split("/")[1]}`;
+        else fileExtension = ".bin"; // Generic binary
+    }
+    if (!fileExtension) fileExtension = ".bin"; // Default if nothing can be determined
+
+    const fileName = `whatsapp-inbound/${tenantId}/${conversationId}/${uuidv4()}${fileExtension}`;
+
+    const { data, error } = await supabaseAdmin.storage
+      .from("whatsapp-media")
+      .upload(fileName, uint8Array, {
+        contentType: originalMediaType,
+        upsert: false,
+      });
+
+    if (error) {
+      console.error("Failed to upload media to Supabase Storage:", error.message);
+      return { success: false, url: null, type: null };
+    }
+
+    const { data: publicUrlData } = supabaseAdmin.storage
+      .from("whatsapp-media")
+      .getPublicUrl(data.path);
+
+    if (!publicUrlData.publicUrl) {
+      console.error("Failed to get public URL for uploaded media.");
+      return { success: false, url: null, type: null };
+    }
+
+    console.log("Media re-hosted successfully:", publicUrlData.publicUrl);
+    return { success: true, url: publicUrlData.publicUrl, type: originalMediaType };
+  } catch (e) {
+    console.error("Error re-hosting media:", e);
+    return { success: false, url: null, type: null };
+  }
+}
 
 async function generateAIResponse(
   supabaseAdmin: ReturnType<typeof createClient>,
@@ -137,7 +199,7 @@ async function generateAIResponse(
           updated_at: new Date().toISOString(),
         }).eq("id", conversationId);
         console.log("Fallback sent for media type:", incomingMediaType);
-        return; // Don't call AI for media
+        return; // Don\'t call AI for media
       }
     }
 
@@ -723,7 +785,7 @@ Deno.serve(async (req) => {
       const remoteJid = data?.key?.remoteJid || body?.sender;
       const fromMe = Boolean(data?.key?.fromMe);
       const messageContent = extractMessageText(data);
-      const { mediaType, mediaUrl } = extractMessageMedia(data);
+      let { mediaType, mediaUrl } = extractMessageMedia(data);
 
       if (!remoteJid) {
         return new Response(JSON.stringify({ success: true, message: "No remoteJid, skipped" }), {
@@ -862,14 +924,37 @@ Deno.serve(async (req) => {
         });
       }
 
+      // --- NEW MEDIA RE-HOSTING LOGIC FOR INBOUND MESSAGES ---
+      let finalMediaUrl = mediaUrl;
+      let finalMediaType = mediaType;
+
+      if (!fromMe && mediaUrl && mediaType && conversation.id) {
+        console.log("Re-hosting inbound media...");
+        const rehostResult = await rehostMedia(
+          supabaseAdmin,
+          instance.tenant_id,
+          conversation.id,
+          mediaUrl,
+          mediaType,
+        );
+        if (rehostResult.success && rehostResult.url) {
+          finalMediaUrl = rehostResult.url;
+          // finalMediaType = rehostResult.type; // Uncomment if media type needs to be refined
+          console.log("Inbound media re-hosted to:", finalMediaUrl);
+        } else {
+          console.error("Failed to re-host inbound media. Using original URL.");
+        }
+      }
+      // --- END NEW MEDIA RE-HOSTING LOGIC ---
+
       // Insert message
       await supabaseAdmin.from("messages").insert({
         conversation_id: conversation.id,
         tenant_id: instance.tenant_id,
         direction: fromMe ? "outbound" : "inbound",
         content: messageContent,
-        media_type: mediaType,
-        media_url: mediaUrl,
+        media_type: finalMediaType, // Use finalMediaType
+        media_url: finalMediaUrl,   // Use finalMediaUrl
         sent_at: new Date().toISOString(),
       });
 
