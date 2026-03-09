@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Buffer } from "node:buffer"; // Import Buffer for Base64 encoding
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,14 +31,15 @@ function jsonResponse(data: unknown, status = 200) {
 // Utility function to fetch URL and convert to Base64
 async function urlToBase64(url: string, mimeType: string): Promise<string> {
   try {
+    console.log("Fetching media from URL:", url); // <--- Adicionei esta linha
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch media from URL: ${response.statusText}`);
     }
     const arrayBuffer = await response.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
-    const base64String = btoa(String.fromCharCode(...bytes)); // Simple btoa for Deno
-    return `data:${mimeType};base64,${base64String}`;
+    const base64String = Buffer.from(bytes).toString('base64'); // Use Buffer for robust Base64 encoding
+    return base64String;
   } catch (error) {
     console.error("Error converting URL to Base64:", error);
     throw error;

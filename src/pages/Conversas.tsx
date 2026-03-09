@@ -60,6 +60,7 @@ function ChatBubble({ message }: { message: Message }) {
         )}
         {isMediaMessage ? (
           <div className="mb-2">
+            {console.log("Message ID:", message.id, "Media URL:", message.media_url, "Media Type:", message.media_type)}
             {message.media_type.startsWith("image") && (
               <img src={message.media_url} alt="Mídia" className="max-w-full h-auto rounded-md" />
             )}
