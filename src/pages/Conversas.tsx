@@ -60,7 +60,6 @@ function ChatBubble({ message }: { message: Message }) {
         )}
         {isMediaMessage ? (
           <div className="mb-2">
-            {console.log("Message ID:", message.id, "Media URL:", message.media_url, "Media Type:", message.media_type)}
             {message.media_type.startsWith("image") && (
               <img src={message.media_url} alt="Mídia" className="max-w-full h-auto rounded-md" />
             )}
@@ -401,10 +400,10 @@ export default function Conversas() {
         buffer += decoder.decode(value, { stream: true });
 
         let idx: number;
-        while ((idx = buffer.indexOf("\n")) !== -1) {
+        while ((idx = buffer.indexOf("\\n")) !== -1) {
           let line = buffer.slice(0, idx);
           buffer = buffer.slice(idx + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.endsWith("\\r")) line = line.slice(0, -1);
           if (line.startsWith(":") || line.trim() === "") continue;
           if (!line.startsWith("data: ")) continue;
           const json = line.slice(6).trim();
@@ -789,7 +788,8 @@ export default function Conversas() {
                       <div className="h-2.5 w-2.5 rounded-full mr-2" style={{ backgroundColor: col.color }} />
                       {col.name}
                     </DropdownMenuItem>
-                  ))}
+                  ))
+                  }
                   {selectedConv.kanban_column_id && (
                     <DropdownMenuItem
                       onClick={async () => {
