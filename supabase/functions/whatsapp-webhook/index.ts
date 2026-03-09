@@ -1,11 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { v4 as uuidv4 } from "https://deno.land/std@0.170.0/uuid/mod.ts";
+import { v4 } from "https://deno.land/std/uuid/mod.ts"; // Corrected import
 import { extname } from "https://deno.land/std@0.170.0/path/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 async function rehostMedia(
@@ -37,7 +37,7 @@ async function rehostMedia(
     }
     if (!fileExtension) fileExtension = ".bin"; // Default if nothing can be determined
 
-    const fileName = `whatsapp-inbound/${tenantId}/${conversationId}/${uuidv4()}${fileExtension}`;
+    const fileName = `whatsapp-inbound/${tenantId}/${conversationId}/${v4.generate()}${fileExtension}`; // Corrected usage
 
     const { data, error } = await supabaseAdmin.storage
       .from("whatsapp-media")
