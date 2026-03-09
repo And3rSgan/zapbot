@@ -64,7 +64,10 @@ function ChatBubble({ message }: { message: Message }) {
               <img src={message.media_url} alt="Mídia" className="max-w-full h-auto rounded-md" />
             )}
             {message.media_type.startsWith("audio") && (
-              <audio controls src={message.media_url} className="w-full" />
+              <>
+                <span>[DEBUG: Audio Aqui]</span>
+                <audio controls src={message.media_url} className="w-full" />
+              </>
             )}
             {message.media_type.startsWith("video") && (
               <video controls src={message.media_url} className="max-w-full h-auto rounded-md" />
@@ -400,10 +403,10 @@ export default function Conversas() {
         buffer += decoder.decode(value, { stream: true });
 
         let idx: number;
-        while ((idx = buffer.indexOf("\\n")) !== -1) {
+        while ((idx = buffer.indexOf("\n")) !== -1) {
           let line = buffer.slice(0, idx);
           buffer = buffer.slice(idx + 1);
-          if (line.endsWith("\\r")) line = line.slice(0, -1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
           if (line.startsWith(":") || line.trim() === "") continue;
           if (!line.startsWith("data: ")) continue;
           const json = line.slice(6).trim();
@@ -473,8 +476,11 @@ export default function Conversas() {
       .in("status", ["pending", "confirmed"])
       .gte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true })
-      .limit(5);
-    setContactSchedules(data || []);
+      .limit(5)
+      .then(({ data }) => {
+        setContactSchedules(data || []);
+        setSchedulesLoading(false);
+      });
   }, [selectedConv?.contact_id, tenantId]);
 
   const notifyContact = async (message: string) => {
@@ -788,8 +794,7 @@ export default function Conversas() {
                       <div className="h-2.5 w-2.5 rounded-full mr-2" style={{ backgroundColor: col.color }} />
                       {col.name}
                     </DropdownMenuItem>
-                  ))
-                  }
+                  ))}
                   {selectedConv.kanban_column_id && (
                     <DropdownMenuItem
                       onClick={async () => {
