@@ -64,10 +64,7 @@ function ChatBubble({ message }: { message: Message }) {
               <img src={message.media_url} alt="Mídia" className="max-w-full h-auto rounded-md" />
             )}
             {message.media_type.startsWith("audio") && (
-              <>
-                <span>[DEBUG: Audio Aqui]</span>
-                <audio controls src={message.media_url} className="w-full" />
-              </>
+              <audio controls src={message.media_url} className="w-full" />
             )}
             {message.media_type.startsWith("video") && (
               <video controls src={message.media_url} className="max-w-full h-auto rounded-md" />
